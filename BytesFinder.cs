@@ -1,4 +1,4 @@
-/*
+﻿/*
  MIT License
 
 Copyright (c) 2019 differentrain
@@ -34,6 +34,7 @@ Requirements:
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 
 #pragma warning disable CA1303
@@ -54,6 +55,8 @@ namespace YYProject.BytesSearch
 
 
         private readonly PatternInfo _mPattInfo;
+
+        public BytesFinder() { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BytesFinder"/> class for the specified bytes pattern.
@@ -139,6 +142,17 @@ namespace YYProject.BytesSearch
             return InnerFindIndex(source, in _mPattInfo, startIndex, count);
         }
 
+        /// <summary>
+        /// Reports the found indexes of the pattern in the specified bytes.
+        /// </summary>
+        /// <param name="source">The bytes to search for an occurrence.</param>
+        /// <returns>A list of the first found occurrences of indexes.-</returns>
+        /// <exception cref="ArgumentException"><paramref name="source"/> is null or empty.</exception>
+        public List<int> FindIndexesIn(byte[] source)
+        {
+            if (source == null || source.Length == 0) throw new ArgumentException("source is null or empty.", nameof(source));
+            return InnerFindIndexes(source, in _mPattInfo, 0, source.Length);
+        }
         #endregion
 
         #region static methods
@@ -303,7 +317,34 @@ namespace YYProject.BytesSearch
             return (new BytesFinder(pattern)).FindIndexIn(source, startIndex, count);
         }
 
-
+        /// <summary>
+        /// Reports the found indexes of the first occurrence of the specified pattern in the specified bytes source.
+        /// The search starts at the specified position and examines a specified number of <see cref="byte"/> positions.
+        /// </summary>
+        /// <param name="source">The bytes to search for an occurrence.</param>
+        /// <param name="pattern">The <see cref="string"/> pattern to seek.</param>
+        /// <returns>A list of occurrences of <paramref name="pattern"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="source"/> is null or empty.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="pattern"/> is null.</exception>
+        /// <exception cref="FormatException">
+        /// The length of <paramref name="pattern"/> is 0 or not equal to this value division by 2.
+        /// <para>- Or -</para>
+        /// Unexpected char in <paramref name="pattern"/>.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="startIndex"/> is less than 0.
+        /// <para>- Or -</para>
+        /// <paramref name="startIndex"/> is greater than or equal to the length of <paramref name="source"/>.
+        /// <para>- Or -</para>
+        /// <paramref name="count"/> is less than or equal to 0.
+        /// <para>- Or -</para>
+        /// <paramref name="count"/> is greater than the length of source minus <paramref name="startIndex"/>.
+        /// </exception>
+        public static List<int> FindIndexes(byte[] source, string pattern)
+        {
+            if (source == null || source.Length == 0) throw new ArgumentException("source is null or empty.", nameof(source));
+            return (new BytesFinder(pattern)).FindIndexesIn(source);
+        }
         #endregion
 
         private static int InnerFindIndex(byte[] source, in PatternInfo pattern, int startIndex, int count)
@@ -332,6 +373,39 @@ namespace YYProject.BytesSearch
                             }
                         }
                         return -1;
+                    }
+                }
+            }
+        }
+
+        private static List<int> InnerFindIndexes(byte[] source, in PatternInfo pattern, int startIndex, int count)
+        {
+            List<int> list = new List<int>();
+            var patternLength = pattern.PatternLength;
+            var pattMaxIdx = patternLength - 1;
+            var maxLen = count - patternLength + 1;
+            unsafe
+            {
+                fixed (int* next = pattern.MoveTable)
+                {
+                    fixed (byte* src = source)
+                    {
+                        while (startIndex < maxLen)
+                        {
+                            var mov = next[src[startIndex + pattMaxIdx]];
+                            if (mov < patternLength)
+                            {
+                                startIndex += mov;
+                                if (pattern.CheckWithPattern(source, startIndex)) list.Add(startIndex);
+                                ++startIndex;
+                            }
+                            else
+                            {
+                                startIndex += patternLength;
+                            }
+                        }
+                        // no results -1??
+                        return list;
                     }
                 }
             }
